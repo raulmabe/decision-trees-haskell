@@ -1,4 +1,6 @@
 -- UTILITIES
+
+
 transpose               :: [[a]] -> [[a]]
 transpose []             = []
 transpose ([]   : xss)   = transpose xss
@@ -37,6 +39,8 @@ infoGainList (header, matrix) = map calcInfoGain $ tail $ zip [0..] header
   where calcInfoGain attrWithIndex = infoGain attrWithIndex matrix
 
 infoGain :: (Int, Attribute) -> [Row] -> Float
+infoGain _ [[]] = 0.0
+infoGain _ [] = 0.0
 infoGain level matrix = genericGini - avgGini level matrix
   where genericGini = gini $ head $ transpose matrix
 
@@ -66,33 +70,57 @@ getMaxWithIndex' llista currentIndex max maxIndex
 
 construccio :: Dataset -> DecisionTree
 construccio dataset
-  | infoGainMax == 0 = Leaf "leaf"
+  | null $ snd dataset = Null
+  | infoGainMax == 0.0 = Leaf $ head $ head $ snd dataset
   | otherwise = Node attrName fills
     where 
       infoGainMax = fst (getMaxWithIndex $ infoGainList dataset)
-      infoIndex = snd (getMaxWithIndex $ infoGainList dataset)
+      infoIndex = snd (getMaxWithIndex $ infoGainList dataset) +1
       headers = fst dataset
       matrix = snd dataset
       attrName = fst (headers !! infoIndex)
-      fills = map (\value -> (value, construccio (headers, filteredRows infoIndex attrName matrix))) (snd (headers !! infoIndex))
+      fills = map (\value -> (value, construccio (headers, filteredRows infoIndex value matrix))) (snd (headers !! infoIndex))
     
+height :: DecisionTree -> Int
+height Null = 0
+height (Leaf _) = 1
+height (Node _ fills) = 1 +  maximum ( map (height . snd) fills)
 
+printTree :: DecisionTree -> IO()
+printTree tree = putStrLn $ drawTree tree 0
 
+drawTree :: DecisionTree -> Int -> String
+drawTree Null _ =  []
+drawTree (Leaf value) level = concat (replicate level "  " ) ++ value 
+drawTree (Node name fills) level = concat (replicate level "  " ) ++ name ++ "\n" ++ concatMap (drawTree' (level +1)) fills
+  
 
--- MAIN
-{- main :: IO ()
-main = do
-    contents <- readFile "agaricus-lepiota.data"
-    mapM_ print $ map  (removeChar ",") $ lines contents
- -}
-
-{- gini :: Dataset -> [Float]
-gini data =  -}
+drawTree' :: Int -> (AttValue, DecisionTree)  -> String
+drawTree' _ (_,Null) = []
+drawTree' level (value,tree) = concat (replicate level "  " ) ++ value ++ "\n" ++ drawTree tree (level+1)  ++ "\n"
 
 main :: IO()
-main = print table
-
-main' = ["pxnk","exyk","ebwn","pxwn","exyn","ebwn","pxwp"]
+main = do
+  contents <- readFile "agaricus-lepiota.data"
+  let dades = map  (removeChar ",") $ lines contents
+  let table = map parse dades
+  let mushrooms = (header, table)
+  
+  putStrLn "--- PRETTY DECISION TREE ---"
+  printTree $ construccio mushrooms
+  putStrLn "--- CLASSIFICATION ---"
+  classificate $ construccio mushrooms
+  
+classificate :: DecisionTree -> IO()
+classificate Null = return ()
+classificate (Leaf value) = putStrLn $ "Prediction: " ++ value
+classificate (Node name fills) = do
+  putStrLn $ "Which " ++ name ++ "?"
+  i <- getLine
+  if elem i $ map fst fills then do
+    classificate $ snd $ head $ filter (\(value, _) -> value == i) fills 
+  else
+    classificate (Node name fills)
 
 parse :: [Char] -> Row
 parse s = parse' s 0 []
@@ -106,32 +134,42 @@ parse'' :: Char -> Int -> AttValue
 parse'' char index
   | index == 0 = charToClassification char
   | index == 1 = charToCapShape char
-  | index == 2 = charToCapColor char
-  | index == 3 = charToGillColor char
-  | otherwise = error $ unwords ["Unexpected feature value :", show index]
+  | index == 2 = charToCapSurface char
+  | index == 3 = charToCapColor char
+  | index == 4 = charToBruises char
+  | index == 5 = charToOdor char
+  | index == 6 = charToGillAttachment char
+  | index == 7 = charToGillSpacing char
+  | index == 8 = charToGillSize char
+  | index == 9 = charToGillColor char
+  | index == 10 = charToStalkShape char
+  | index == 11 = charToStalkRoot char
+  | index == 12 = charToSsar char
+  | index == 13 = charToSsbr char
+  | index == 14 = charToScar char
+  | index == 15 = charToScbr char
+  | index == 16 = charToVeilType char
+  | index == 17 = charToVeilColor char
+  | index == 18 = charToRingNumber char
+  | index == 19 = charToRingType char
+  | index == 20 = charToSporePrintColor char
+  | index == 21 = charToPopulation char
+  | index == 22 = charToHabitat char
+  | otherwise = error $ unwords ["Unexpected feature value =:", show index]
 
 -- DATA MODELS
+{- minorData = ["pxnk","exyk","ebwn","pxwn","exyn","ebwn","pxwp"]
 mushrooms :: Dataset
 mushrooms = (header, table)
+table :: [Row]
+table =  map parse minorData -}
 
 header :: [Attribute]
-header = [classification, capShape, capColor, gillColor]
-table :: [Row]
-table =  map parse main'
-
-
-classification :: Attribute
-classification = ("class", ["edible","poisonous"])
-
-capShape :: Attribute
-capShape = ("cap-shape", ["bell" ,"conical" ,"convex" ,"flat" ,"knobbed" ,"sunken"])
-
-
-capColor :: Attribute
-capColor = ("cap-color", ["brown","buff","cinnamon","gray","green","pink","purple","red","white","yellow"])
-
-gillColor :: Attribute
-gillColor = ("gill-color", ["black","brown","buff","chocolate","gray", "green","orange","pink","purple","red", "white","yellow"])
+header = [
+          classification, capShape, capSurface, capColor, bruises, odor, gillAttachment, gillSpacing, gillSize, 
+          gillColor, stalkShape, stalkRoot, stalkSurfaceAboveRing, stalkSurfaceBelowRing, stalkColorAboveRing , stalkColorBelowRing, 
+          veilType, veilColor, ringNumber, ringType, sporePrintColor, population, habitat
+          ]
 
 type AttName = String
 type AttValue = String
@@ -140,7 +178,7 @@ type Header = [Attribute]
 type Row = [AttValue]
 type Dataset = (Header, [Row])
 
-data DecisionTree = Leaf AttValue | Node AttName [(AttValue, DecisionTree)] deriving (Eq, Show)
+data DecisionTree = Null | Leaf AttValue | Node AttName [(AttValue, DecisionTree)] deriving (Eq, Show)
 
 type Dict = (String -> (Int, Float))
 create = const
@@ -149,12 +187,17 @@ insert dict key value x
   | key == x  = value
   | otherwise = dict x
 
+classification :: Attribute
+classification = ("class", ["edible","poisonous"])
 charToClassification :: Char -> String
 charToClassification c 
   | c == 'p' = snd classification !! 1
   | c == 'e' = snd classification !! 0
-  | otherwise = error $ unwords ["Unexpected feature value :", show c]
+  | otherwise = error $ unwords ["Unexpected feature value classification:", show c]
 
+
+capShape :: Attribute
+capShape = ("cap-shape", ["bell" ,"conical" ,"convex" ,"flat" ,"knobbed" ,"sunken"])
 charToCapShape :: Char -> String
 charToCapShape c
  | c == 'b' = snd capShape !! 0
@@ -163,18 +206,22 @@ charToCapShape c
  | c == 'f' = snd capShape !! 3
  | c == 'k' = snd capShape !! 4
  | c == 's' = snd capShape !! 5
- |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ |otherwise = error $ unwords ["Unexpected feature value capShape:", show c]
 
-data CapSurface = CSFibrous | CSGrooves | CSScaly | CSSmooth deriving (Eq, Read, Show, Ord, Enum )
-charToCapSurface :: Char -> CapSurface
+capSurface :: Attribute
+capSurface = ("cap-surface", ["fibrous","grooves","scaly","smooth"])
+charToCapSurface :: Char -> String
 charToCapSurface c
- | c == 'f' = CSFibrous
- | c == 'g' = CSGrooves
- | c == 'y' = CSScaly
- | c == 's' = CSSmooth
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'f' = snd capSurface !! 0
+ | c == 'g' = snd capSurface !! 1
+ | c == 'y' = snd capSurface !! 2
+ | c == 's' = snd capSurface !! 3
+  |otherwise = error $ unwords ["Unexpected feature value capSurface:", show c]
 
 
+
+capColor :: Attribute
+capColor = ("cap-color", ["brown","buff","cinnamon","gray","green","pink","purple","red","white","yellow"])
 charToCapColor :: Char -> String
 charToCapColor c
  | c == 'n' = snd capColor !! 0
@@ -187,53 +234,61 @@ charToCapColor c
  | c == 'e' = snd capColor !! 7
  | c == 'w' = snd capColor !! 8
  | c == 'y' = snd capColor !! 9
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+  |otherwise = error $ unwords ["Unexpected feature value capColor:", show c]
 
-charToBruises :: Char -> Bool
+bruises :: Attribute
+bruises = ("bruises", ["true", "false"])
+charToBruises :: Char -> String
 charToBruises c 
- | c == 't' = True
- | c == 'f' = False
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 't' = snd bruises !! 0
+ | c == 'f' = snd bruises !! 1
+  |otherwise = error $ unwords ["Unexpected feature value bruises:", show c]
 
-data Odor = Almond | Anise | Creosote | Fishy | Foul | Musty | None | Pungent | Spicy deriving (Eq, Read, Show, Ord, Enum )
-charToOdor :: Char -> Odor
+odor :: Attribute
+odor = ("odor", ["almond","anise","creosote","fishy","foul", "musty","none","pungent","spicy"])
+charToOdor :: Char -> String
 charToOdor c
- | c == 'a' = Almond
- | c == 'l' = Anise
- | c == 'c' = Creosote
- | c == 'y' = Fishy
- | c == 'f' = Foul
- | c == 'm' = Musty
- | c == 'n' = None
- | c == 'p' = Pungent
- | c == 's' = Spicy
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'a' = snd odor !! 0
+ | c == 'l' = snd odor !! 1
+ | c == 'c' = snd odor !! 2
+ | c == 'y' = snd odor !! 3
+ | c == 'f' = snd odor !! 4
+ | c == 'm' = snd odor !! 5
+ | c == 'n' = snd odor !! 6
+ | c == 'p' = snd odor !! 7
+ | c == 's' = snd odor !! 8
+  |otherwise = error $ unwords ["Unexpected feature value odor:", show c]
 
-data GillAttachment = Attached | Descending | Free | Notched deriving (Eq, Read, Show, Ord, Enum )
-charToGillAttachment :: Char -> GillAttachment
+gillAttachment :: Attribute
+gillAttachment = ("gill-attachment",["attached","descending","free","notched"])
+charToGillAttachment :: Char -> String
 charToGillAttachment c
- | c == 'a' = Attached
- | c == 'd' = Descending
- | c == 'f' = Free
- | c == 'n' = Notched
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'a' = snd gillAttachment !! 0
+ | c == 'd' = snd gillAttachment !! 1
+ | c == 'f' = snd gillAttachment !! 2
+ | c == 'n' = snd gillAttachment !! 3
+  |otherwise = error $ unwords ["Unexpected feature value gillAttachment:", show c]
 
-data GillSpacing = Close | Crowded | Distant deriving (Eq, Read, Show, Ord, Enum )
-charToGillSpacing :: Char -> GillSpacing
+gillSpacing :: Attribute
+gillSpacing = ("gill-spacing", ["close","crowded","distant"])
+charToGillSpacing :: Char -> String
 charToGillSpacing c
- | c == 'c' = Close
- | c == 'w' = Crowded
- | c == 'd' = Distant
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'c' = snd gillSpacing !! 0
+ | c == 'w' = snd gillSpacing !! 1
+ | c == 'd' = snd gillSpacing !! 2
+  |otherwise = error $ unwords ["Unexpected feature value gillSpacing:", show c]
 
-data GillSize = Broad | Narrow deriving (Eq, Read, Show, Ord, Enum )
-charToGillSize :: Char -> GillSize
+gillSize :: Attribute
+gillSize = ("gill-size", ["broad","narrow"])
+charToGillSize :: Char -> String
 charToGillSize c
- | c == 'b' = Broad
- | c == 'n' = Narrow
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'b' = snd gillSize !! 0
+ | c == 'n' = snd gillSize !! 1
+  |otherwise = error $ unwords ["Unexpected feature value gillSize:", show c]
 
-data GillColor = GCBlack | GCBrown | GCBuff | GCChocolate | GCGray | GCGreen | GCOrange | GCPink | GCPurple | GCRed | GCWhite | GCYellow deriving (Eq, Read, Show, Ord, Enum )
+
+gillColor :: Attribute
+gillColor = ("gill-color", ["black","brown","buff","chocolate","gray", "green","orange","pink","purple","red", "white","yellow"])
 charToGillColor :: Char -> String
 charToGillColor c
  | c == 'k' = snd gillColor !! 0
@@ -247,145 +302,156 @@ charToGillColor c
  | c == 'u' = snd gillColor !! 8
  | c == 'e' = snd gillColor !! 9
  | c == 'w' = snd gillColor !! 10
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'y' = snd gillColor !! 11
+  |otherwise = error $ unwords ["Unexpected feature value gillColor:", show c]
 
-data StalkShape = Enlarging | Tapering deriving (Eq, Read, Show, Ord, Enum )
-charToStalkShape :: Char -> StalkShape
+stalkShape :: Attribute
+stalkShape = ("stalk-shape", ["enlarging","tapering"])
+charToStalkShape :: Char -> String
 charToStalkShape c
- | c == 'e' = Enlarging
- | c == 't' = Tapering
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'e' = snd stalkShape !! 0
+ | c == 't' = snd stalkShape !! 1
+  |otherwise = error $ unwords ["Unexpected feature value stalkShape:", show c]
 
-data StalkRoot = Bulbous | Club | Cup | Equal | Rhizomorphs | Rooted deriving (Eq, Read, Show, Ord, Enum )
-
-charToStalkRoot :: Char -> Maybe StalkRoot
+stalkRoot :: Attribute
+stalkRoot = ("stalk-root", ["bulbous","club","cup","equal", "rhizomorphs","rooted","missing"])
+charToStalkRoot :: Char -> String
 charToStalkRoot c
- | c == 'b' = Just Bulbous
- | c == 'c' = Just Club
- | c == 'u' = Just Cup
- | c == 'e' = Just Equal
- | c == 'z' = Just Rhizomorphs
- | c == 'r' = Just Rooted
- | c == '?'= Nothing
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'b' = snd stalkRoot !! 0
+ | c == 'c' = snd stalkRoot !! 1
+ | c == 'u' = snd stalkRoot !! 2
+ | c == 'e' = snd stalkRoot !! 3
+ | c == 'z' = snd stalkRoot !! 4
+ | c == 'r' = snd stalkRoot !! 5
+ | c == '?' = snd stalkRoot !! 6
+  |otherwise = error $ unwords ["Unexpected feature value stalkRoot:", show c]
 
-data StalkSurfaceAboveRing = SSARFibrous | SSARScaly | SSARSilky | SSARSmooth deriving (Eq, Read, Show, Ord, Enum )
-charToSsar :: Char -> StalkSurfaceAboveRing
+stalkSurfaceAboveRing :: Attribute
+stalkSurfaceAboveRing = ("stalk-surface-above-ring", ["fibrous","scaly","silky","smooth"]) 
+charToSsar :: Char -> String
 charToSsar c
- | c == 'f' = SSARFibrous
- | c == 'y' = SSARScaly
- | c == 'k' = SSARSilky
- | c == 's' = SSARSmooth
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'f' = snd stalkSurfaceAboveRing !! 0
+ | c == 'y' = snd stalkSurfaceAboveRing !! 1
+ | c == 'k' = snd stalkSurfaceAboveRing !! 2
+ | c == 's' = snd stalkSurfaceAboveRing !! 3
+  |otherwise = error $ unwords ["Unexpected feature value stalkSurfaceAboveRing:", show c]
 
-data StalkSurfaceBelowRing = SSBRFibrous | SSBRScaly | SSBRSilky | SSBRSmooth deriving (Eq, Read, Show, Ord, Enum )
-charToSsbr :: Char -> StalkSurfaceBelowRing
+stalkSurfaceBelowRing :: Attribute
+stalkSurfaceBelowRing = ("stalk-surface-below-ring", ["fibrous","scaly","silky","smooth"])
+charToSsbr :: Char -> String
 charToSsbr c
- | c == 'f' = SSBRFibrous
- | c == 'y' = SSBRScaly
- | c == 'k' = SSBRSilky
- | c == 's' = SSBRSmooth
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'f' = snd stalkSurfaceBelowRing !! 0
+ | c == 'y' = snd stalkSurfaceBelowRing !! 1
+ | c == 'k' = snd stalkSurfaceBelowRing !! 2
+ | c == 's' = snd stalkSurfaceBelowRing !! 3
+  |otherwise = error $ unwords ["Unexpected feature value stalkSurfaceBelowRing:", show c]
 
-data StalkColorAboveRing = SCARBrown | SCARBuff | SCARCinnamon | SCARGray | SCAROrange | SCARPink | SCARRed | SCARWhite | SCARYellow deriving (Eq, Read, Show, Ord, Enum )
-charToScar :: Char -> StalkColorAboveRing
+stalkColorAboveRing :: Attribute
+stalkColorAboveRing = ("stalk-color-above-ring", ["brown","buff","cinnamon","gray","orange", "pink","red","white","yellow"])
+charToScar :: Char -> String
 charToScar c
- | c == 'n' = SCARBrown
- | c == 'b' = SCARBuff
- | c == 'c' = SCARCinnamon
- | c == 'g' = SCARGray
- | c == 'o' = SCAROrange
- | c == 'p' = SCARPink
- | c == 'e' = SCARRed
- | c == 'w' = SCARWhite
- | c == 'y' = SCARYellow
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'n' = snd stalkColorAboveRing !! 0
+ | c == 'b' = snd stalkColorAboveRing !! 1
+ | c == 'c' = snd stalkColorAboveRing !! 2
+ | c == 'g' = snd stalkColorAboveRing !! 3
+ | c == 'o' = snd stalkColorAboveRing !! 4
+ | c == 'p' = snd stalkColorAboveRing !! 5
+ | c == 'e' = snd stalkColorAboveRing !! 6
+ | c == 'w' = snd stalkColorAboveRing !! 7
+ | c == 'y' = snd stalkColorAboveRing !! 8
+  |otherwise = error $ unwords ["Unexpected feature value stalkColorAboveRing:", show c]
 
-data StalkColorBelowRing = SCBRBrown | SCBRBuff | SCBRCinnamon | SCBRGray | SCBROrange | SCBRPink | SCBRRed | SCBRWhite | SCBRYellow deriving (Eq, Read, Show, Ord, Enum )
-charToScbr :: Char -> StalkColorBelowRing
+stalkColorBelowRing = ( "stalk-color-below-ring",["brown","buff","cinnamon","gray","orange", "pink","red","white","yellow"])
+charToScbr :: Char -> String
 charToScbr c
- | c == 'n' = SCBRBrown
- | c == 'b' = SCBRBuff
- | c == 'c' = SCBRCinnamon
- | c == 'g' = SCBRGray
- | c == 'o' = SCBROrange
- | c == 'p' = SCBRPink
- | c == 'e' = SCBRRed
- | c == 'w' = SCBRWhite
- | c == 'y' = SCBRYellow
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'n' = snd stalkColorBelowRing !! 0
+ | c == 'b' = snd stalkColorBelowRing !! 1
+ | c == 'c' = snd stalkColorBelowRing !! 2
+ | c == 'g' = snd stalkColorBelowRing !! 3
+ | c == 'o' = snd stalkColorBelowRing !! 4
+ | c == 'p' = snd stalkColorBelowRing !! 5
+ | c == 'e' = snd stalkColorBelowRing !! 6
+ | c == 'w' = snd stalkColorBelowRing !! 7
+ | c == 'y' = snd stalkColorBelowRing !! 8
+  |otherwise = error $ unwords ["Unexpected feature value stalkColorBelowRing:", show c]
 
-data VeilType = Partial | Universal deriving (Eq, Read, Show, Ord, Enum )
-charToVeilType :: Char -> VeilType
+veilType :: Attribute
+veilType = ("veil-type", ["partial","universal"])
+charToVeilType :: Char -> String
 charToVeilType c
- | c == 'p' = Partial
- | c == 'u' = Universal
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'p' = snd veilType !! 0
+ | c == 'u' = snd veilType !! 1
+  |otherwise = error $ unwords ["Unexpected feature value veilType:", show c]
 
-data VeilColor = VCBrown | VCOrange | VCWhite | VCYellow deriving (Eq, Read, Show, Ord, Enum )
-charToVeilColor :: Char -> VeilColor
+veilColor :: Attribute
+veilColor = ("veil-color",["brown","orange","white","yellow"])
+charToVeilColor :: Char -> String
 charToVeilColor c
- | c == 'n' = VCBrown
- | c == 'o' = VCOrange
- | c == 'w' = VCWhite
- | c == 'y' = VCYellow
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'n' = snd veilColor !! 0
+ | c == 'o' = snd veilColor !! 1
+ | c == 'w' = snd veilColor !! 2
+ | c == 'y' = snd veilColor !! 3
+  |otherwise = error $ unwords ["Unexpected feature value veilColor:", show c]
 
--- | 18. ring-number: none=n,one=o,two=t
-data RingNumber = RNNone | RNOne | RNTwo deriving (Eq, Read, Show, Ord, Enum )
-charToRingNumber :: Char -> RingNumber
+ringNumber :: Attribute
+ringNumber = ("ring-number", ["none","one","two"])
+charToRingNumber :: Char -> String
 charToRingNumber c
- | c == 'n' = RNNone
- | c == 'o' = RNOne
- | c == 't' = RNTwo
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'n' = snd ringNumber !! 0
+ | c == 'o' = snd ringNumber !! 1
+ | c == 't' = snd ringNumber !! 2
+  |otherwise = error $ unwords ["Unexpected feature value ringNumber:", show c]
 
-data RingType = RTCobwebby | RTEvanescent | RTFlaring | RTLarge | RTNone | RTPendant | RTSheathing | RTZone deriving (Eq, Read, Show, Ord, Enum )
-charToRingType :: Char -> RingType
+ringType :: Attribute
+ringType = ("ring-type", ["cobwebby","evanescent","flaring","large", "none","pendant","sheathing","zone"])
+charToRingType :: Char -> String
 charToRingType c
- | c == 'c' = RTCobwebby
- | c == 'e' = RTEvanescent
- | c == 'f' = RTFlaring
- | c == 'l' = RTLarge
- | c == 'n' = RTNone
- | c == 'p' = RTPendant
- | c == 's' = RTSheathing
- | c == 'z' = RTZone
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'c' = snd ringType !! 0
+ | c == 'e' = snd ringType !! 1
+ | c == 'f' = snd ringType !! 2
+ | c == 'l' = snd ringType !! 3
+ | c == 'n' = snd ringType !! 4
+ | c == 'p' = snd ringType !! 5
+ | c == 's' = snd ringType !! 6
+ | c == 'z' = snd ringType !! 7
+  |otherwise = error $ unwords ["Unexpected feature value ringType:", show c]
 
-data SporePrintColor = SPCBlack | SPCBrown | SPCBuff | SPCChocolate | SPCGreen | SPCOrange | SPCPurple | SPCWhite | SPCYellow deriving (Eq, Read, Show, Ord, Enum )
-charToSporePrintColor :: Char -> SporePrintColor
+sporePrintColor :: Attribute
+sporePrintColor = ("spore-print-color",["black","brown","buff","chocolate","green", "orange","purple","white","yellow"])
+charToSporePrintColor :: Char -> String
 charToSporePrintColor c
- | c == 'k' = SPCBlack
- | c == 'n' = SPCBrown
- | c == 'b' = SPCBuff
- | c == 'h' = SPCChocolate
- | c == 'r' = SPCGreen
- | c == 'o' = SPCOrange
- | c == 'u' = SPCPurple
- | c == 'w' = SPCWhite
- | c == 'y' = SPCYellow
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'k' = snd sporePrintColor !! 0
+ | c == 'n' = snd sporePrintColor !! 1
+ | c == 'b' = snd sporePrintColor !! 2
+ | c == 'h' = snd sporePrintColor !! 3
+ | c == 'r' = snd sporePrintColor !! 4
+ | c == 'o' = snd sporePrintColor !! 5
+ | c == 'u' = snd sporePrintColor !! 6
+ | c == 'w' = snd sporePrintColor !! 7
+ | c == 'y' = snd sporePrintColor !! 8
+  |otherwise = error $ unwords ["Unexpected feature value sporePrintColor:", show c]
 
-data Population = Abundant | Clustered | Numerous | Scattered | Several | Solitary deriving (Eq, Read, Show, Ord, Enum )
-charToPopulation :: Char -> Population
+population :: Attribute
+population = ("population", ["abundant","clustered","numerous", "scattered","several","solitary"])
+charToPopulation :: Char -> String
 charToPopulation c
- | c == 'a' = Abundant
- | c == 'c' = Clustered
- | c == 'n' = Numerous
- | c == 's' = Scattered
- | c == 'v' = Several
- | c == 'y' = Solitary
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'a' = snd population !! 0
+ | c == 'c' = snd population !! 1
+ | c == 'n' = snd population !! 2
+ | c == 's' = snd population !! 3
+ | c == 'v' = snd population !! 4
+ | c == 'y' = snd population !! 5
+  |otherwise = error $ unwords ["Unexpected feature value population:", show c]
 
-data Habitat = Grasses | Leaves | Meadows | Paths | Urban | Waste | Woods deriving (Eq, Read, Show, Ord, Enum )
-charToHabitat :: Char -> Habitat
+habitat :: Attribute
+habitat = ("habitat", ["grasses","leaves","meadows","paths", "urban","waste","woods"])
+charToHabitat :: Char -> String
 charToHabitat c
- | c == 'g' = Grasses
- | c == 'l' = Leaves
- | c == 'm' = Meadows
- | c == 'p' = Paths
- | c == 'u' = Urban
- | c == 'w' = Waste
- | c == 'd' = Woods
-  |otherwise = error $ unwords ["Unexpected feature value :", show c]
+ | c == 'g' = snd habitat !! 0
+ | c == 'l' = snd habitat !! 1
+ | c == 'm' = snd habitat !! 2
+ | c == 'p' = snd habitat !! 3
+ | c == 'u' = snd habitat !! 4
+ | c == 'w' = snd habitat !! 5
+ | c == 'd' = snd habitat !! 6
+  |otherwise = error $ unwords ["Unexpected feature value habitat:", show c]
