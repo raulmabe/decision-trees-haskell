@@ -1,30 +1,34 @@
 -- UTILITIES
+   
+{- CALCULATES THE HEIGHT OF THE TREE -}
+height :: DecisionTree -> Int
+height Null = 0
+height (Leaf _) = 1
+height (Node _ fills) = 1 +  maximum ( map (height . snd) fills)
 
-
+{- TRANSPOSES A MATRIX -}
 transpose               :: [[a]] -> [[a]]
 transpose []             = []
 transpose ([]   : xss)   = transpose xss
 transpose ((x:xs) : xss) = (x : [h | (h:_) <- xss]) : transpose (xs : [ t | (_:t) <- xss])
 
+{- REMOVES ALL OCURRENCES OF A STRING IN A STRING -}
 removeChar :: String -> String -> String
-removeChar c s = filter (not . (`elem` c)) s
+removeChar c  = filter (not . (`elem` c)) 
 
-allSame :: Eq a => [a] -> Bool
-allSame s = all (== head s) s
-
-removeTupleWhere :: Eq a => a -> [(a,b)] -> [(a,b)]
-removeTupleWhere n ts = filter (\tuple -> fst tuple /= n) ts
-
+{- REMOVES DUPLICATES OF A STRING -}
 nub :: Eq a => [a] -> [a]
 nub (x:xs) = x : nub (filter (/= x) xs)
 nub [] = []
 
+{- ENUMERA QUANTS COPS SURT UNA MATEIXA STRING EN UNA LLISTA DE STRINGS -}
 classCounts :: Row -> [(String,Int)]
 classCounts row = map (`classCounts'` row) $ nub row
 
 classCounts' :: String -> Row -> (String,Int)
 classCounts' a row = (a, length $ filter (== a) row)
 
+{- CALC THE GINI IMPURITY -}
 gini :: Row -> Float
 gini row = gini' (length row)  (classCounts row) 1 
 
@@ -33,7 +37,7 @@ gini' length appears impurity
   | null appears = impurity
   | otherwise = gini' length (tail appears) $ impurity - ((fromIntegral (snd (head appears)) / fromIntegral length) ** 2.0)
 
-
+{- CALC THE INFO GAIN OF EACH POSSIBLE COLUMN OF A DATASET -}
 infoGainList :: Dataset -> [Float]
 infoGainList (header, matrix) = map calcInfoGain $ tail $ zip [0..] header
   where calcInfoGain attrWithIndex = infoGain attrWithIndex matrix
@@ -55,10 +59,11 @@ partition index matrix = foldl insereix (create (0,-1)) (nub (transpose matrix !
           where value =  (length (head (transpose filteredTable)), gini (head (transpose filteredTable)))
                   where filteredTable = filter (\row -> row !! index == key) matrix
 
-
+{- REDUCE MATRIX TO ONES CONCORDING WITH KEY -}
 filteredRows :: Int -> String -> [Row] -> [Row]
 filteredRows index key  = filter (\row -> row !! index == key) 
 
+{- Get max value of an array and its index -}
 getMaxWithIndex :: [Float] -> (Float, Int)
 getMaxWithIndex xs = getMaxWithIndex' xs 0 0 0
 
@@ -68,6 +73,7 @@ getMaxWithIndex' llista currentIndex max maxIndex
   | (llista !! currentIndex) > max = getMaxWithIndex' llista (currentIndex+1) (llista !! currentIndex) currentIndex
   | otherwise = getMaxWithIndex' llista (currentIndex+1) max maxIndex
 
+{- Build a decision tree based on a dataset -}
 construccio :: Dataset -> DecisionTree
 construccio dataset
   | null $ snd dataset = Null
@@ -80,15 +86,12 @@ construccio dataset
       matrix = snd dataset
       attrName = fst (headers !! infoIndex)
       fills = map (\value -> (value, construccio (headers, filteredRows infoIndex value matrix))) (snd (headers !! infoIndex))
-    
-height :: DecisionTree -> Int
-height Null = 0
-height (Leaf _) = 1
-height (Node _ fills) = 1 +  maximum ( map (height . snd) fills)
 
+{- Prints tree -}
 printTree :: DecisionTree -> IO()
 printTree tree = putStrLn $ drawTree tree 0
 
+{- Draws tree in string -}
 drawTree :: DecisionTree -> Int -> String
 drawTree Null _ =  []
 drawTree (Leaf value) level = concat (replicate level "  " ) ++ value 
@@ -98,6 +101,7 @@ drawTree (Node name fills) level = concat (replicate level "  " ) ++ name ++ "\n
 drawTree' :: Int -> (AttValue, DecisionTree)  -> String
 drawTree' _ (_,Null) = []
 drawTree' level (value,tree) = concat (replicate level "  " ) ++ value ++ "\n" ++ drawTree tree (level+1)  ++ "\n"
+
 
 main :: IO()
 main = do
@@ -122,6 +126,7 @@ classificate (Node name fills) = do
   else
     classificate (Node name fills)
 
+{- Parsing methods -}
 parse :: [Char] -> Row
 parse s = parse' s 0 []
 
@@ -158,7 +163,11 @@ parse'' char index
   | otherwise = error $ unwords ["Unexpected feature value =:", show index]
 
 -- DATA MODELS
-{- minorData = ["pxnk","exyk","ebwn","pxwn","exyn","ebwn","pxwp"]
+{- http://hackage.haskell.org/package/datasets-0.3.0/docs/src/Numeric.Datasets.Mushroom.html#MushroomEntry -}
+
+{- 
+MINOR DATA FOR TESTING
+minorData = ["pxnk","exyk","ebwn","pxwn","exyn","ebwn","pxwp"]
 mushrooms :: Dataset
 mushrooms = (header, table)
 table :: [Row]
